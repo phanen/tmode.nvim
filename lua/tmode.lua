@@ -51,7 +51,7 @@ M.enable = function()
             api.nvim_win_set_cursor(w, b.term_pos)
           end
         end, 10)
-      end, 10)
+      end, 15)
     end,
   })
   api.nvim_create_autocmd('BufLeave', {
