@@ -3,7 +3,8 @@ local api, fn = vim.api, vim.fn
 
 local M = {}
 
-local ns = api.nvim_create_augroup('u.tmode', { clear = true })
+local name = 'u.tmode'
+local ns = api.nvim_create_augroup(name, { clear = true })
 
 M.enable = function()
   api.nvim_create_autocmd('TermEnter', { -- https://github.com/neovim/neovim/issues/26881
@@ -14,6 +15,7 @@ M.enable = function()
     group = ns,
     callback = function(ev)
       vim.defer_fn(function()
+        if not api.nvim_buf_is_valid(ev.buf) then return end
         local ft = vim.bo[ev.buf].ft
         if ft == 'fzf' or ft == 'PlenaryTestPopup' then return end
         vim.b[ev.buf].term_insert = 1
@@ -26,11 +28,6 @@ M.enable = function()
         '<cmd>let b:term_insert=0<cr><c-\\><c-n>',
         { buffer = ev.buf }
       )
-      vim.keymap.set({ 'n' }, 'q', function()
-        local chan = vim.bo.channel
-        local is_running = fn.jobwait({ chan }, 0)[1] == -1
-        return is_running and fn.jobstop(chan) or vim.cmd [[bwipe!]]
-      end, { buffer = ev.buf })
     end,
   })
   api.nvim_create_autocmd('BufEnter', {
@@ -39,28 +36,34 @@ M.enable = function()
     callback = function(ev)
       local b = vim.b[ev.buf]
       vim.defer_fn(function()
-        if not api.nvim_buf_is_valid(ev.buf) or api.nvim_get_current_buf() ~= ev.buf then return end
+        if
+          not api.nvim_buf_is_valid(ev.buf)
+          or api.nvim_get_current_buf() ~= ev.buf
+          or vim.bo.ft == 'fzf'
+        then
+          return
+        end
         if assert(b.term_insert) == 1 then
           vim.cmd [[startinsert]]
           return
         end
         vim.cmd [[stopinsert]]
         vim.defer_fn(function()
-          if not api.nvim_buf_is_valid(ev.buf) or not b.term_pos then return end
+          if not api.nvim_buf_is_valid(ev.buf) or not b.term_view then return end
           for _, w in ipairs(fn.win_findbuf(ev.buf)) do
-            api.nvim_win_set_cursor(w, b.term_pos)
+            api.nvim_win_call(w, function() fn.winrestview(b.term_view) end)
           end
         end, 10)
-      end, 15)
+      end, 20)
     end,
   })
   api.nvim_create_autocmd('BufLeave', {
     group = ns,
     pattern = 'term://*',
-    command = [[let b:term_pos = nvim_win_get_cursor(0)]],
+    command = [[let b:term_view = winsaveview()]],
   })
 end
 
-M.disable = function() api.nvim_create_augroup('u.tmode', { clear = true }) end
+M.disable = function() api.nvim_create_augroup(name, { clear = true }) end
 
 return M
